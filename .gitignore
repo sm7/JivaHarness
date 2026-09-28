@@ -3,3 +3,11 @@ __pycache__/
 .pytest_cache/
 .demo-state/
 .jiva-state/
+*.py[cod]
+.venv/
+venv/
+.hermes/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
