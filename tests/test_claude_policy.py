@@ -7,7 +7,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from jiva_harness.claude_policy import ClaudePolicy
-from jiva_harness.demo import SCENARIOS, build_loop, chat, run_demo, scripted_policy, summarize
+from jiva_harness.demo import SCENARIOS, run_demo, scripted_policy, summarize
 from jiva_harness.loop import Finish
 
 
@@ -178,36 +178,6 @@ def test_custom_goal_reaches_claude_and_the_ledger(tmp_path):
     assert client.requests[0]["messages"][0] == {"role": "user", "content": "find me a chair"}
     assert audit.entries()[0]["data"]["goal"] == "find me a chair"
     assert summarize(result, harness, audit, tmp_path, "find me a chair")["goal"] == "find me a chair"
-
-
-def test_chat_runs_goals_with_approvals_on_one_ledger(tmp_path):
-    client = FakeClient([
-        reply(tool_use("a", "place_order", item="laptop", amount=900)),
-        reply(NS(type="text", text="blocked"), stop_reason="end_turn"),
-        reply(tool_use("b", "place_order", item="laptop", amount=900)),
-        reply(NS(type="text", text="ordered"), stop_reason="end_turn"),
-    ])
-    loop, harness, audit = build_loop(tmp_path, ClaudePolicy(client=client))
-    lines = iter(["buy a laptop", "/approve place_order", "buy a laptop", "/bogus", "/quit"])
-    out: list[str] = []
-
-    chat(loop, harness, audit, tmp_path, read=lambda _: next(lines), write=out.append)
-
-    text = "\n".join(out)
-    assert "BLOCKED  by principle hook" in text and "ALLOWED  ->" in text
-    assert "unknown command /bogus" in text
-    assert [r.experience.action["name"] for r in harness.citta.records] == ["refused", "purchase"]
-    assert audit.verify() and [e["event"] for e in audit.entries()].count("run_started") == 2
-
-
-def test_chat_ends_on_eof(tmp_path):
-    loop, harness, audit = build_loop(tmp_path, ClaudePolicy(client=FakeClient([])))
-
-    def eof(_):
-        raise EOFError
-
-    chat(loop, harness, audit, tmp_path, read=eof, write=lambda _: None)
-    assert audit.entries() == []
 
 
 def test_cli_rejects_custom_goal_without_a_model(tmp_path):

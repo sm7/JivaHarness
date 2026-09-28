@@ -61,8 +61,9 @@ python3 -m jiva_harness.cli live-demo --policy scripted        # same scenario, 
 python3 -m jiva_harness.cli live-demo --list-scenarios         # harmful, unknown-tool, approved-purchase, over-budget
 python3 -m jiva_harness.cli live-demo --scenario over-budget
 python3 -m jiva_harness.cli live-demo --goal "Order two monitors"
-python3 -m jiva_harness.cli chat                               # type goals; /approve place_order, /run NAME, /quit
 ```
+
+Running `jiva-harness` (or `python3 -m jiva_harness.cli`) with no command starts an interactive session: you give the agent tasks in one ongoing conversation, each proposed action and its verdict print as they happen, and when the agent proposes an irreversible action you haven't approved, the harness asks you (yes once, always this session, or no). A "no" is recorded in Citta as a block. The identity and ledger live in `.jiva/` and carry over between sessions; `/help` lists the commands.
 
 Claude sees each verdict as the result of its own tool call, so it has to work with refusals rather than around them. The scripted run also proposes a tool that was never registered, to show the registry denying it; a real model is only offered registered tools.
 

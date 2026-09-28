@@ -42,7 +42,7 @@ class ClaudePolicy:
 
     def __init__(
         self, client: Any = None, model: str = DEFAULT_MODEL, system: str | None = None,
-        effort: str = "medium", max_tokens: int = 16000, fallbacks: bool = True,
+        effort: str = "medium", max_tokens: int = 16000, fallbacks: bool = True, keep_history: bool = False,
     ):
         if client is None:
             import anthropic  # optional dependency: pip install 'jiva-harness[claude]'
@@ -52,6 +52,11 @@ class ClaudePolicy:
             client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
         self.client, self.model, self.system = client, model, system
         self.effort, self.max_tokens, self.fallbacks = effort, max_tokens, fallbacks
+        self.keep_history = keep_history  # True: each run's goal continues one conversation
+        self.reset()
+
+    def reset(self) -> None:
+        """Forget the conversation; the next goal starts a new one."""
         self.messages: list[dict[str, Any]] = []
         self.responses: list[Any] = []
         self._pending: str | None = None
@@ -59,7 +64,17 @@ class ClaudePolicy:
 
     def propose(self, goal: str, history: list[Turn], tools: list[dict[str, Any]]) -> Proposal:
         if not history:  # a new run
-            self.messages, self.responses, self._pending, self._seen = [{"role": "user", "content": goal}], [], None, 0
+            if not (self.keep_history and self.messages):
+                self.reset()
+                self.messages.append({"role": "user", "content": goal})
+            else:
+                content: list[dict[str, Any]] = []
+                if self._pending is not None:  # the last run stopped (halt, max_steps) before judging this call
+                    content.append({"type": "tool_result", "tool_use_id": self._pending, "is_error": True,
+                                    "content": json.dumps({"outcome": "not_run", "error": "run ended first"})})
+                    self._pending = None
+                self.messages.append({"role": "user", "content": [*content, {"type": "text", "text": goal}]})
+            self._seen = 0
         for turn in history[self._seen:]:
             if self._pending is None:
                 raise RuntimeError("history has a turn this policy did not propose")

@@ -69,6 +69,22 @@ class CittaLedger:
         path.write_text(json.dumps({"type": "genesis", "genesis_hash": genesis_hash}, sort_keys=True) + "\n", encoding="utf-8")
         return cls(path, genesis_hash)
 
+    @classmethod
+    def open(cls, path: str | Path, brahmacarya_buffer: list[dict[str, Any]]) -> "CittaLedger":
+        """Resume an existing ledger (same identity, same conduct) or create it if absent."""
+        path = Path(path)
+        if not path.exists():
+            return cls.create(path, brahmacarya_buffer)
+        lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+        genesis_hash = _hash(brahmacarya_buffer)
+        if not lines or lines[0] != {"type": "genesis", "genesis_hash": genesis_hash}:
+            raise ValueError(f"{path} belongs to a different identity (genesis mismatch)")
+        records = [CittaRecord(row["index"], row["leaf_hash"], Experience(**row["experience"])) for row in lines[1:]]
+        ledger = cls(path, genesis_hash, records)
+        if not ledger.verify():
+            raise ValueError(f"{path} failed verification; refusing to extend a tampered ledger")
+        return ledger
+
     @property
     def did(self) -> str:
         return f"did:jiva:{self.genesis_hash}"

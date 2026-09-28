@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from .tools import CONSEQUENTIAL, Tool
 
@@ -35,16 +35,23 @@ class Principle(Protocol):
 class Ahimsa:
     """Non-harm: no irreversible or external-effect action unless the human principal approved that tool.
 
-    Approval comes from the run's principal, never from tool args, because args are model-authored.
+    Approval comes from the run's principal, never from tool args, because args are model-authored:
+    either up front (`approved_irreversible`) or, when `ask` is given, by asking the principal at the
+    moment the action is proposed.
     """
 
     name = "ahimsa"
+
+    def __init__(self, ask: Callable[[ActionContext], bool] | None = None):
+        self.ask = ask
 
     def check(self, ctx: ActionContext) -> Verdict:
         if ctx.tool.risk not in CONSEQUENTIAL:
             return Verdict(self.name, True, f"{ctx.tool.risk} action")
         if ctx.tool.name in ctx.approved_irreversible:
             return Verdict(self.name, True, f"{ctx.tool.risk} action approved by principal")
+        if self.ask is not None and self.ask(ctx):
+            return Verdict(self.name, True, f"{ctx.tool.risk} action approved by principal when proposed")
         return Verdict(self.name, False, f"'{ctx.tool.name}' is {ctx.tool.risk} and was not approved by the principal")
 
 

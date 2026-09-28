@@ -108,7 +108,7 @@ def loop_demo(state_dir: Path) -> dict[str, object]:
 NO_KEY = "Set ANTHROPIC_API_KEY_JIVA (or ANTHROPIC_API_KEY)."
 
 
-def _claude_policy(args: argparse.Namespace):
+def _claude_policy(args: argparse.Namespace, keep_history: bool = False):
     """ClaudePolicy plus the SDK's error base class, or (None, None) after printing why not."""
     try:
         import anthropic
@@ -121,7 +121,8 @@ def _claude_policy(args: argparse.Namespace):
     from .claude_policy import ClaudePolicy
     from .demo import SYSTEM
 
-    return ClaudePolicy(model=args.model, system=SYSTEM, effort=args.effort), anthropic.AnthropicError
+    policy = ClaudePolicy(model=args.model, system=SYSTEM, effort=args.effort, keep_history=keep_history)
+    return policy, anthropic.AnthropicError
 
 
 def _api_failure(exc: Exception, api_error: type | None) -> bool:
@@ -170,21 +171,17 @@ def live_demo(args: argparse.Namespace) -> int:
     return 0
 
 
-def chat_command(args: argparse.Namespace) -> int:
-    from .demo import build_loop, chat
+def session_command(args: argparse.Namespace) -> int:
+    from .session import Session
 
-    policy, api_error = _claude_policy(args)
+    policy, api_error = _claude_policy(args, keep_history=True)
     if policy is None:
         return 2
-    loop, harness, audit = build_loop(args.state_dir, policy)
-    print(f"Jiva harness chat: model={args.model}, agent {harness.citta.did}\nLedger: {args.state_dir}/")
-    try:
-        chat(loop, harness, audit, args.state_dir)
-    except Exception as exc:
-        if _api_failure(exc, api_error):
-            print(f"Claude API call failed: {exc}\n{NO_KEY}", file=sys.stderr)
-            return 2
-        raise
+
+    def recoverable(exc: Exception) -> str | None:
+        return f"Claude API call failed: {exc}\n  {NO_KEY}" if _api_failure(exc, api_error) else None
+
+    Session(policy, args.state_dir, recoverable=recoverable).repl()
     return 0
 
 
@@ -195,8 +192,13 @@ def _add_model_args(parser: argparse.ArgumentParser) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Paper-faithful Jiva governance harness")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        description="Jiva governance harness. With no command, starts an interactive session: you give the "
+                    "agent tasks, and every action it proposes is judged by the harness as it happens.")
+    _add_model_args(parser)
+    parser.add_argument("--state-dir", type=Path, default=Path(".jiva"),
+                        help="where the agent's identity ledger and audit log live (kept between sessions)")
+    subparsers = parser.add_subparsers(dest="command")
     demo_parser = subparsers.add_parser("demo", help="run one scoped actor-critic action")
     demo_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-state"))
     loop_parser = subparsers.add_parser("loop-demo", help="run the multi-step governed agent loop")
@@ -213,11 +215,10 @@ def main() -> None:
                              help="principal approval for an irreversible tool, e.g. --approve place_order")
     live_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-live-demo"))
     live_parser.add_argument("--json", action="store_true", help="print the structured summary instead")
-    chat_parser = subparsers.add_parser("chat", help="type goals one after another; the harness judges each action")
-    _add_model_args(chat_parser)
-    chat_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-chat"))
     args = parser.parse_args()
 
+    if args.command is None:
+        sys.exit(session_command(args))
     if args.command == "demo":
         args.state_dir.mkdir(parents=True, exist_ok=True)
         print(json.dumps(demo(args.state_dir), indent=2, sort_keys=True))
@@ -226,8 +227,6 @@ def main() -> None:
         print(json.dumps(loop_demo(args.state_dir), indent=2, sort_keys=True))
     elif args.command == "live-demo":
         sys.exit(live_demo(args))
-    elif args.command == "chat":
-        sys.exit(chat_command(args))
 
 
 if __name__ == "__main__":

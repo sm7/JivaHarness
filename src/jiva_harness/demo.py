@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 from .audit import AuditLog
+from .citta import CittaLedger
 from .examples import place_order, quote_price, save_draft_po
 from .loop import AgentLoop, Finish, LoopResult, Policy, Proposal, ScriptedPolicy, ToolCall
-from .principles import Ahimsa, PrincipleHook
+from .principles import ActionContext, Ahimsa, PrincipleHook
 from .runtime import DeploymentSpec, JivaHarness
 from .tools import ToolRegistry
 
@@ -107,20 +108,28 @@ def scripted_policy(scenario: str = "procurement") -> ScriptedPolicy:
     return ScriptedPolicy(SCENARIOS[scenario].script)
 
 
-def build_loop(state_dir: Path, policy: Policy, max_steps: int = 8) -> tuple[AgentLoop, JivaHarness, AuditLog]:
-    """Deploy a fresh procurement Jiva whose ledger and audit log start empty in state_dir."""
+BRAHMACARYA = [{"stage": "brahmacarya", "scenario": "approved procurement", "result": "aligned"}]
+TOOLS = (quote_price, save_draft_po, place_order)
+
+
+def build_loop(
+    state_dir: Path, policy: Policy, max_steps: int = 8, resume: bool = False,
+    ask: Callable[[ActionContext], bool] | None = None,
+) -> tuple[AgentLoop, JivaHarness, AuditLog]:
+    """Deploy the procurement Jiva in state_dir: a fresh ledger, or with resume=True the one already there.
+
+    `ask` lets Ahimsa put an irreversible action to the principal when it is proposed.
+    """
     state_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("citta.jsonl", "audit.jsonl"):
-        (state_dir / name).unlink(missing_ok=True)
-    harness = JivaHarness.deploy(
-        spec=SPEC, citta_path=state_dir / "citta.jsonl",
-        brahmacarya_buffer=[{"stage": "brahmacarya", "scenario": "approved procurement", "result": "aligned"}],
-    )
+    if not resume:
+        for name in ("citta.jsonl", "audit.jsonl"):
+            (state_dir / name).unlink(missing_ok=True)
+    harness = JivaHarness(SPEC, CittaLedger.open(state_dir / "citta.jsonl", BRAHMACARYA))
     registry = ToolRegistry(harness.scope_resolver)
-    for tool in (quote_price, save_draft_po, place_order):
+    for tool in TOOLS:
         registry.register(tool)
     audit = AuditLog(state_dir / "audit.jsonl")
-    loop = AgentLoop(harness, registry, PrincipleHook([Ahimsa()]), audit, policy, max_steps=max_steps)
+    loop = AgentLoop(harness, registry, PrincipleHook([Ahimsa(ask=ask)]), audit, policy, max_steps=max_steps)
     return loop, harness, audit
 
 
@@ -132,70 +141,18 @@ def run_demo(
     return result, harness, audit
 
 
-CHAT_HELP = """Type a goal for the agent, or a command:
-  /approve TOOL   approve an irreversible tool (e.g. /approve place_order) for the following goals
-  /revoke TOOL    withdraw that approval
-  /scenarios      list ready-made goals; /run NAME runs one
-  /quit           exit
-Tools: quote_price (read), save_draft_po (not in this deployment's scope), place_order (spends money)."""
+def tamper_check(audit: AuditLog, state_dir: Path) -> bool | None:
+    """Edit one recorded decision in a copy of the audit log; True if the hash chain catches it.
 
-
-def chat(
-    loop: AgentLoop, harness: JivaHarness, audit: AuditLog, state_dir: Path,
-    read: Callable[[str], str] = input, write: Callable[[str], None] = print,
-) -> None:
-    """Interactive loop: one identity and one ledger across goals, so Citta grows with each run."""
-    approved: set[str] = set()
-    write(CHAT_HELP)
-    while True:
-        try:
-            line = read("\ngoal> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            write("")
-            return
-        if not line:
-            continue
-        command, _, arg = line.partition(" ")
-        arg = arg.strip()
-        if command in ("/quit", "/exit"):
-            return
-        if command == "/help":
-            write(CHAT_HELP)
-            continue
-        if command == "/approve" and arg:
-            approved.add(arg)
-            write(f"approved: {', '.join(sorted(approved))}")
-            continue
-        if command == "/revoke" and arg:
-            approved.discard(arg)
-            write(f"approved: {', '.join(sorted(approved)) or 'none'}")
-            continue
-        if command == "/scenarios":
-            write("\n".join(f"  {name:<18} {s.goal}" for name, s in SCENARIOS.items()))
-            continue
-        goal = line
-        run_approved = frozenset(approved)
-        if command == "/run":
-            if arg not in SCENARIOS:
-                write(f"unknown scenario {arg!r}; /scenarios lists them")
-                continue
-            goal, run_approved = SCENARIOS[arg].goal, run_approved | SCENARIOS[arg].approve
-            write(f"goal: {goal}")
-        elif command.startswith("/"):
-            write(f"unknown command {command}; /help lists them")
-            continue
-        result = loop.run(principal=PRINCIPAL, channel=CHANNEL, goal=goal, approved_irreversible=run_approved)
-        write(render(summarize(result, harness, audit, state_dir, goal),
-                     f"Principal approvals: {', '.join(sorted(run_approved)) or 'none'}", show_goal=False))
-
-
-def tamper_check(audit: AuditLog, state_dir: Path) -> bool:
-    """Edit one recorded decision in a copy of the audit log; True if the hash chain catches it."""
+    None when the log is empty and there is nothing to edit.
+    """
     copy = state_dir / "audit.tampered.jsonl"
-    lines = audit.path.read_text(encoding="utf-8").splitlines()
-    entry = json.loads(lines[1])
+    lines = [json.dumps(entry, sort_keys=True) for entry in audit.entries()]
+    if not lines:
+        return None
+    entry = json.loads(lines[-1])
     entry["data"]["tampered"] = True
-    lines[1] = json.dumps(entry, sort_keys=True)
+    lines[-1] = json.dumps(entry, sort_keys=True)
     copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
     caught = not AuditLog(copy).verify()
     copy.unlink()
@@ -205,7 +162,6 @@ def tamper_check(audit: AuditLog, state_dir: Path) -> bool:
 def summarize(
     result: LoopResult, harness: JivaHarness, audit: AuditLog, state_dir: Path, goal: str = GOAL,
 ) -> dict[str, Any]:
-    records = harness.citta.records
     return {
         "goal": goal,
         "turns": [
@@ -215,6 +171,13 @@ def summarize(
         ],
         "answer": result.answer,
         "stop_reason": result.stop_reason,
+        **ledger_status(harness, audit, state_dir),
+    }
+
+
+def ledger_status(harness: JivaHarness, audit: AuditLog, state_dir: Path) -> dict[str, Any]:
+    records = harness.citta.records
+    return {
         "agent_did": harness.citta.did,
         "citta": {
             "records": len(records),
@@ -231,7 +194,7 @@ def summarize(
     }
 
 
-def _decided_by(outcome: str, error: str) -> str:
+def decided_by(outcome: str, error: str) -> str:
     if outcome == "denied":
         return "tool registry" if error.startswith("unknown tool") else "permission gate"
     return {"blocked": "principle hook", "halted": "algedonic halt", "error": "tool"}.get(outcome, "harness")
@@ -247,9 +210,9 @@ def render(summary: dict[str, Any], header: str, show_goal: bool = True) -> str:
             lines.append(f"        ALLOWED  -> {json.dumps(turn['observation'], sort_keys=True)}")
         else:
             error = turn["observation"].get("error", "")
-            lines.append(f"        {turn['outcome'].upper():<8} by {_decided_by(turn['outcome'], error)}: {error}")
+            lines.append(f"        {turn['outcome'].upper():<8} by {decided_by(turn['outcome'], error)}: {error}")
     citta, audit = summary["citta"], summary["audit"]
-    yes = {True: "yes", False: "NO"}
+    yes = {True: "yes", False: "NO", None: "n/a (empty log)"}
     lines += [
         "",
         f"Answer ({summary['stop_reason']}): {summary['answer']}",
