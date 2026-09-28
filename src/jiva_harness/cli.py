@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from .audit import AuditLog
@@ -102,6 +103,41 @@ def loop_demo(state_dir: Path) -> dict[str, object]:
     }
 
 
+def live_demo(args: argparse.Namespace) -> int:
+    from .demo import SYSTEM, render, run_demo, scripted_policy, summarize
+
+    if args.policy == "claude":
+        try:
+            import anthropic
+        except ImportError:
+            print("live-demo --policy claude needs the Anthropic SDK: pip install -e '.[claude]'", file=sys.stderr)
+            return 2
+        from .claude_policy import ClaudePolicy
+
+        policy = ClaudePolicy(model=args.model, system=SYSTEM, effort=args.effort)
+        header = f"Jiva harness live demo: policy=claude model={args.model}"
+    else:
+        policy = scripted_policy()
+        header = "Jiva harness live demo: policy=scripted (no model; replays fixed proposals)"
+    approved = frozenset(args.approve)
+    header += f"\nPrincipal approvals: {', '.join(sorted(approved)) or 'none'}"
+    try:
+        result, harness, audit = run_demo(args.state_dir, policy, approved)
+    except Exception as exc:
+        # the SDK raises TypeError, not an API error, when it finds no credentials at all
+        no_credentials = isinstance(exc, TypeError) and "authentication" in str(exc)
+        if args.policy == "claude" and (isinstance(exc, anthropic.AnthropicError) or no_credentials):
+            print(f"Claude API call failed: {exc}\nSet ANTHROPIC_API_KEY, or run with --policy scripted "
+                  "to see the same scenario without a model.", file=sys.stderr)
+            return 2
+        raise
+    summary = summarize(result, harness, audit, args.state_dir)
+    if args.policy == "claude":
+        summary["model_usage"] = policy.usage()
+    print(json.dumps(summary, indent=2, sort_keys=True) if args.json else render(summary, header))
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Paper-faithful Jiva governance harness")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -109,6 +145,15 @@ def main() -> None:
     demo_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-state"))
     loop_parser = subparsers.add_parser("loop-demo", help="run the multi-step governed agent loop")
     loop_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-state"))
+    live_parser = subparsers.add_parser(
+        "live-demo", help="a model pursues a goal while the harness allows, blocks and denies its actions")
+    live_parser.add_argument("--policy", choices=("claude", "scripted"), default="claude")
+    live_parser.add_argument("--model", default="claude-opus-5")
+    live_parser.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max"), default="medium")
+    live_parser.add_argument("--approve", action="append", default=[], metavar="TOOL",
+                             help="principal approval for an irreversible tool, e.g. --approve place_order")
+    live_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-live-demo"))
+    live_parser.add_argument("--json", action="store_true", help="print the structured summary instead")
     args = parser.parse_args()
 
     if args.command == "demo":
@@ -117,6 +162,8 @@ def main() -> None:
     elif args.command == "loop-demo":
         args.state_dir.mkdir(parents=True, exist_ok=True)
         print(json.dumps(loop_demo(args.state_dir), indent=2, sort_keys=True))
+    elif args.command == "live-demo":
+        sys.exit(live_demo(args))
 
 
 if __name__ == "__main__":

@@ -3,3 +3,4 @@ __pycache__/
 .pytest_cache/
 .demo-state/
 .jiva-state/
+.jiva-live-demo/
