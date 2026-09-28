@@ -1,0 +1,71 @@
+{
+  "source": "Figure 2 and Sections 5.1-5.4 of An Advaita Vedanta Approach to Agentic AI Identity and Governance",
+  "flows": [
+    "Jiva acts", "Guides", "Dharma governs", "Prakriti executes",
+    "Karma records, evaluates, and informs future constraint",
+    "Learning feedback", "Policy feedback"
+  ],
+  "layers": [
+    {
+      "key": "atman",
+      "name": "Atman - Universal Foundational Potential",
+      "governed_at_runtime": false,
+      "components": [
+        "Principal Hierarchy", "Human Principal", "Orchestrator Agent", "Chat Apps",
+        "APIs", "Service Portals", "Browsers", "Agent Marketplace"
+      ]
+    },
+    {
+      "key": "jiva",
+      "name": "Jiva - The Conditioned, Deployed Agent",
+      "components": [
+        "Identity-centric Control Layer", "Sankalpa - Policy function",
+        "Agent Decision Logic", "Goal-directed planning", "Policy constrained execution",
+        "Isvara (Karmaphaladata) - Evaluation function", "Intrinsic action evaluation",
+        "Continuous feedback", "Inline risk scoring", "Citta - Identity ledger",
+        "Identity Anchor", "Agent DID", "Genesis record", "OBO Token Scope",
+        "Ephemeral", "Non-transferable", "Identity-scoped", "Immutable Root identity",
+        "Identity-preserving delegation", "Scope resolver", "Atman-Jiva boundary",
+        "Service principal to Jiva identity migration", "Token issuance anchored to Citta",
+        "Agent Instance", "Operational actor - Jiva", "Verifiable credentials",
+        "Scope", "Capability", "Role", "Conditions"
+      ]
+    },
+    {
+      "key": "prakriti",
+      "name": "Prakriti",
+      "components": [
+        "Secure Runtime Substrate", "Base LLM provider", "Compute & Runtime",
+        "Guna distribution monitoring", "Agent Memory", "Search & Knowledge (Viveka)",
+        "Security Guardrails", "Prompt injection", "Insecure output", "Tool misuse",
+        "Training leakage"
+      ]
+    },
+    {
+      "key": "dharma",
+      "name": "Dharma",
+      "components": [
+        "Policy Governance Layer", "Sadharana-dharma", "Universal Safety", "EU AI Act",
+        "NIST RMF", "Enterprise baseline controls", "Visesha-dharma",
+        "Context-specific agent purpose, scope, and role", "PBAC", "OPA",
+        "Contextual authorization engine", "Karmadhyaksa console", "Agent deployer",
+        "GRC", "oversight", "Human governance oversight", "Agent & LLM gateway",
+        "MCP gateway", "Contract-policy engine", "Policy enforcement point",
+        "Regulatory evidence store", "Factsheets", "model cards", "audit reports",
+        "Compliance evidence system"
+      ]
+    },
+    {
+      "key": "karma",
+      "name": "Karma",
+      "intervenes_at_runtime": false,
+      "components": [
+        "Citta - Identity ledger", "Identity-bound action record", "Token lineage",
+        "Immutable audit trail", "Isvara (Karmaphaladata) - Evaluation function",
+        "Risk signals", "Behavior assessment", "Outcome feedback", "Karmadhyaksa console",
+        "Audit evidence", "Harm attribution", "Access review", "Learning feedback",
+        "Policy feedback"
+      ]
+    }
+  ]
+}

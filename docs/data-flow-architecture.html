@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JivaHarness Data-Flow Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:'JetBrains Mono',monospace;background:#020617;color:#fff;padding:2rem;min-height:100vh}.container{max-width:1500px;margin:auto}.header{margin-bottom:1.5rem}.header-row{display:flex;align-items:center;gap:.8rem}.dot{width:11px;height:11px;border-radius:50%;background:#22d3ee;animation:pulse 2s infinite}@keyframes pulse{50%{opacity:.4}}h1{font-size:1.45rem}.subtitle{color:#94a3b8;font-size:.82rem;margin:.45rem 0 0 1.8rem}.frame{background:rgba(15,23,42,.55);border:1px solid #1e293b;border-radius:1rem;padding:1rem;overflow-x:auto}svg{min-width:1250px;width:100%;display:block}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1rem;margin-top:1.3rem}.card{background:rgba(15,23,42,.55);border:1px solid #1e293b;border-radius:.75rem;padding:1rem}.card h3{font-size:.85rem;margin-bottom:.6rem}.card ul{list-style:none;color:#94a3b8;font-size:.74rem;line-height:1.65}.footer{text-align:center;color:#475569;font-size:.7rem;margin-top:1.2rem}
+</style>
+</head>
+<body><div class="container">
+<div class="header"><div class="header-row"><div class="dot"></div><h1>JivaHarness — Runtime Data Flow</h1></div><p class="subtitle">Paper-faithful separation of capability, authorization, action, evaluation, identity, and feedback</p></div>
+<div class="frame"><svg viewBox="0 0 1400 940" role="img" aria-labelledby="title desc">
+<title id="title">JivaHarness production data-flow architecture</title><desc id="desc">A request enters through the principal hierarchy, is bound to Citta identity and Dharma scope, planned by Sankalpa using Atman capability, executed in Prakriti, evaluated by Karmaphaladata, recorded in Citta, and fed through Karma and Karmadhyaksa.</desc>
+<defs>
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+<marker id="arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#94a3b8"/></marker>
+<marker id="cyanArrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#22d3ee"/></marker>
+<marker id="roseArrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polygon points="0 0,9 3.5,0 7" fill="#fb7185"/></marker>
+</defs>
+<rect width="1400" height="940" fill="url(#grid)"/>
+
+<!-- Governance and agent boundaries -->
+<rect x="185" y="215" width="1180" height="680" rx="14" fill="rgba(251,191,36,.025)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,5"/>
+<text x="202" y="237" fill="#fbbf24" font-size="10" font-weight="600">RUNTIME GOVERNANCE BOUNDARY — JĪVA / DHARMA / PRAKṚTI / KARMA</text>
+<rect x="210" y="265" width="825" height="410" rx="12" fill="rgba(6,78,59,.07)" stroke="#34d399" stroke-width="1" stroke-dasharray="5,4"/>
+<text x="228" y="287" fill="#34d399" font-size="10" font-weight="600">JĪVA — THE CONDITIONED, DEPLOYED AGENT</text>
+
+<!-- Arrows first -->
+<line x1="145" y1="390" x2="242" y2="390" stroke="#22d3ee" stroke-width="2" marker-end="url(#cyanArrow)"/>
+<line x1="408" y1="390" x2="462" y2="390" stroke="#22d3ee" stroke-width="2" marker-end="url(#cyanArrow)"/>
+<line x1="628" y1="390" x2="682" y2="390" stroke="#22d3ee" stroke-width="2" marker-end="url(#cyanArrow)"/>
+<line x1="848" y1="390" x2="1075" y2="390" stroke="#22d3ee" stroke-width="2" marker-end="url(#cyanArrow)"/>
+<line x1="1235" y1="390" x2="1300" y2="390" stroke="#22d3ee" stroke-width="2" marker-end="url(#cyanArrow)"/>
+<path d="M765 338 C765 235 830 195 880 170" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M930 170 C1000 210 920 300 830 338" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M545 443 L545 520" fill="none" stroke="#fb7185" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#roseArrow)"/>
+<path d="M765 443 L765 520" fill="none" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M1300 430 C1200 510 980 560 925 570" fill="none" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="925" y1="575" x2="950" y2="575" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M950 610 C910 680 715 680 675 610" fill="none" stroke="#22d3ee" stroke-width="1.6" marker-end="url(#cyanArrow)"/>
+<path d="M800 630 L800 735" fill="none" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#arrow)"/>
+<path d="M570 630 C580 700 650 735 700 762" fill="none" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#arrow)"/>
+<path d="M1025 817 C970 880 610 880 545 443" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,5" marker-end="url(#arrow)"/>
+<path d="M1100 755 C1190 700 1205 600 1205 445" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,5" marker-end="url(#arrow)"/>
+
+<!-- Atman outside boundary -->
+<rect x="720" y="55" width="390" height="120" rx="10" fill="#0f172a"/>
+<rect x="720" y="55" width="390" height="120" rx="10" fill="rgba(30,41,59,.5)" stroke="#94a3b8" stroke-width="1.5"/>
+<text x="915" y="82" fill="white" font-size="13" font-weight="700" text-anchor="middle">ĀTMAN — UNIVERSAL FOUNDATIONAL POTENTIAL</text>
+<text x="915" y="106" fill="#cbd5e1" font-size="10" text-anchor="middle">Base foundation model · representational capabilities</text>
+<text x="915" y="129" fill="#94a3b8" font-size="9" text-anchor="middle">Invoked by Saṅkalpa; no deployed identity or scope</text>
+<text x="915" y="151" fill="#fb7185" font-size="9" text-anchor="middle">OUTSIDE RUNTIME GOVERNANCE</text>
+
+<!-- Principal hierarchy -->
+<rect x="15" y="330" width="130" height="120" rx="8" fill="#0f172a"/>
+<rect x="15" y="330" width="130" height="120" rx="8" fill="rgba(30,41,59,.5)" stroke="#94a3b8" stroke-width="1.5"/>
+<text x="80" y="356" fill="white" font-size="11" font-weight="600" text-anchor="middle">Principal Hierarchy</text>
+<text x="80" y="378" fill="#94a3b8" font-size="8" text-anchor="middle">Human · Orchestrator</text>
+<text x="80" y="394" fill="#94a3b8" font-size="8" text-anchor="middle">Chat · API · Portal</text>
+<text x="80" y="410" fill="#94a3b8" font-size="8" text-anchor="middle">Browser · Marketplace</text>
+<text x="80" y="433" fill="#22d3ee" font-size="8" text-anchor="middle">request + delegated authority</text>
+
+<!-- Scope resolver -->
+<rect x="242" y="330" width="166" height="120" rx="8" fill="#0f172a"/>
+<rect x="242" y="330" width="166" height="120" rx="8" fill="rgba(136,19,55,.4)" stroke="#fb7185" stroke-width="1.5"/>
+<text x="325" y="354" fill="white" font-size="11" font-weight="600" text-anchor="middle">Scope Resolver</text>
+<text x="325" y="377" fill="#fecdd3" font-size="8" text-anchor="middle">Ātman–Jīva boundary</text>
+<text x="325" y="394" fill="#94a3b8" font-size="8" text-anchor="middle">Agent DID · genesis record</text>
+<text x="325" y="411" fill="#94a3b8" font-size="8" text-anchor="middle">OBO token: scope · role</text>
+<text x="325" y="428" fill="#94a3b8" font-size="8" text-anchor="middle">capability · conditions</text>
+
+<!-- Dharma -->
+<rect x="462" y="330" width="166" height="120" rx="8" fill="#0f172a"/>
+<rect x="462" y="330" width="166" height="120" rx="8" fill="rgba(136,19,55,.4)" stroke="#fb7185" stroke-width="1.5"/>
+<text x="545" y="354" fill="white" font-size="11" font-weight="600" text-anchor="middle">DHARMA</text>
+<text x="545" y="376" fill="#fecdd3" font-size="8" text-anchor="middle">Sādhāraṇa-dharma</text>
+<text x="545" y="393" fill="#fecdd3" font-size="8" text-anchor="middle">Viśeṣa-dharma</text>
+<text x="545" y="411" fill="#94a3b8" font-size="8" text-anchor="middle">Contextual authorization</text>
+<text x="545" y="430" fill="#fb7185" font-size="8" text-anchor="middle">ALLOW / DENY + policy evidence</text>
+
+<!-- Sankalpa -->
+<rect x="682" y="330" width="166" height="120" rx="8" fill="#0f172a"/>
+<rect x="682" y="330" width="166" height="120" rx="8" fill="rgba(6,78,59,.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="765" y="354" fill="white" font-size="11" font-weight="600" text-anchor="middle">SAṄKALPA</text>
+<text x="765" y="376" fill="#a7f3d0" font-size="8" text-anchor="middle">Policy function π(a|s,g,c)</text>
+<text x="765" y="394" fill="#94a3b8" font-size="8" text-anchor="middle">Agent decision logic</text>
+<text x="765" y="411" fill="#94a3b8" font-size="8" text-anchor="middle">Goal-directed planning</text>
+<text x="765" y="430" fill="#34d399" font-size="8" text-anchor="middle">proposed action + z trace</text>
+
+<!-- Gateway -->
+<rect x="1075" y="330" width="160" height="120" rx="8" fill="#0f172a"/>
+<rect x="1075" y="330" width="160" height="120" rx="8" fill="rgba(136,19,55,.4)" stroke="#fb7185" stroke-width="1.5"/>
+<text x="1155" y="354" fill="white" font-size="10" font-weight="600" text-anchor="middle">Agent &amp; LLM Gateway</text>
+<text x="1155" y="376" fill="#fecdd3" font-size="8" text-anchor="middle">MCP gateway</text>
+<text x="1155" y="394" fill="#94a3b8" font-size="8" text-anchor="middle">Contract-policy engine</text>
+<text x="1155" y="411" fill="#94a3b8" font-size="8" text-anchor="middle">Policy enforcement point</text>
+<text x="1155" y="430" fill="#fb7185" font-size="8" text-anchor="middle">scoped action only</text>
+
+<!-- Prakriti runtime -->
+<rect x="1300" y="310" width="85" height="160" rx="8" fill="#0f172a"/>
+<rect x="1300" y="310" width="85" height="160" rx="8" fill="rgba(120,53,15,.3)" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="1342" y="337" fill="white" font-size="10" font-weight="600" text-anchor="middle">PRAKṚTI</text>
+<text x="1342" y="359" fill="#fde68a" font-size="8" text-anchor="middle">Secure</text>
+<text x="1342" y="374" fill="#fde68a" font-size="8" text-anchor="middle">runtime</text>
+<text x="1342" y="398" fill="#94a3b8" font-size="8" text-anchor="middle">tools</text>
+<text x="1342" y="414" fill="#94a3b8" font-size="8" text-anchor="middle">memory</text>
+<text x="1342" y="430" fill="#94a3b8" font-size="8" text-anchor="middle">viveka</text>
+<text x="1342" y="452" fill="#fbbf24" font-size="8" text-anchor="middle">outcome</text>
+
+<!-- Denial evidence -->
+<rect x="465" y="520" width="210" height="110" rx="8" fill="#0f172a"/>
+<rect x="465" y="520" width="210" height="110" rx="8" fill="rgba(76,29,149,.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="570" y="545" fill="white" font-size="11" font-weight="600" text-anchor="middle">Citta — Identity Ledger</text>
+<text x="570" y="568" fill="#c4b5fd" font-size="8" text-anchor="middle">identity anchor · immutable root</text>
+<text x="570" y="586" fill="#94a3b8" font-size="8" text-anchor="middle">Lₜ = H(s,g,c,a,r,z)</text>
+<text x="570" y="604" fill="#94a3b8" font-size="8" text-anchor="middle">token lineage · audit trail</text>
+<text x="570" y="620" fill="#fb7185" font-size="8" text-anchor="middle">denial decision evidence</text>
+
+<!-- Critic -->
+<rect x="700" y="520" width="225" height="110" rx="8" fill="#0f172a"/>
+<rect x="700" y="520" width="225" height="110" rx="8" fill="rgba(76,29,149,.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="812" y="545" fill="white" font-size="10" font-weight="600" text-anchor="middle">Īśvara / Karmaphaladātā</text>
+<text x="812" y="566" fill="#c4b5fd" font-size="8" text-anchor="middle">Intrinsic evaluation function</text>
+<text x="812" y="584" fill="#94a3b8" font-size="8" text-anchor="middle">task + śreya − sattva divergence</text>
+<text x="812" y="602" fill="#94a3b8" font-size="8" text-anchor="middle">risk · behavior · outcome feedback</text>
+<text x="812" y="619" fill="#a78bfa" font-size="8" text-anchor="middle">reward rₜ</text>
+
+<!-- Experience tuple -->
+<rect x="950" y="520" width="250" height="110" rx="8" fill="#0f172a"/>
+<rect x="950" y="520" width="250" height="110" rx="8" fill="rgba(8,51,68,.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="1075" y="545" fill="white" font-size="10" font-weight="600" text-anchor="middle">Identity-bound Experience</text>
+<text x="1075" y="568" fill="#a5f3fc" font-size="8" text-anchor="middle">state s · goal g · constraints c</text>
+<text x="1075" y="586" fill="#a5f3fc" font-size="8" text-anchor="middle">action a · reward r · activation z</text>
+<text x="1075" y="605" fill="#94a3b8" font-size="8" text-anchor="middle">append to Citta after outcome</text>
+
+<!-- Karma -->
+<rect x="650" y="735" width="300" height="120" rx="9" fill="#0f172a"/>
+<rect x="650" y="735" width="300" height="120" rx="9" fill="rgba(76,29,149,.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="800" y="762" fill="white" font-size="12" font-weight="700" text-anchor="middle">KARMA</text>
+<text x="800" y="785" fill="#c4b5fd" font-size="8" text-anchor="middle">records · evaluates · informs future constraint</text>
+<text x="800" y="805" fill="#94a3b8" font-size="8" text-anchor="middle">identity-bound history · risk · behavior · outcomes</text>
+<text x="800" y="828" fill="#a78bfa" font-size="8" text-anchor="middle">no direct runtime intervention</text>
+
+<!-- Karmadhyaksa -->
+<rect x="990" y="735" width="220" height="120" rx="9" fill="#0f172a"/>
+<rect x="990" y="735" width="220" height="120" rx="9" fill="rgba(136,19,55,.4)" stroke="#fb7185" stroke-width="1.5"/>
+<text x="1100" y="762" fill="white" font-size="11" font-weight="600" text-anchor="middle">Karmādhyakṣa Console</text>
+<text x="1100" y="785" fill="#fecdd3" font-size="8" text-anchor="middle">Agent deployer · GRC · oversight</text>
+<text x="1100" y="805" fill="#94a3b8" font-size="8" text-anchor="middle">audit · attribution · access review</text>
+<text x="1100" y="828" fill="#fbbf24" font-size="8" text-anchor="middle">later policy / learning feedback</text>
+
+<!-- labels -->
+<text x="192" y="379" fill="#94a3b8" font-size="8">1 request</text>
+<text x="434" y="379" fill="#94a3b8" font-size="8">2 credential</text>
+<text x="651" y="379" fill="#94a3b8" font-size="8">3 allow</text>
+<text x="938" y="379" fill="#94a3b8" font-size="8">4 proposal</text>
+<text x="1252" y="379" fill="#94a3b8" font-size="8">5 execute</text>
+<text x="939" y="503" fill="#94a3b8" font-size="8">6 outcome</text>
+<text x="775" y="670" fill="#22d3ee" font-size="8">7 append H(s,g,c,a,r,z) to Citta</text>
+<text x="1007" y="890" fill="#fbbf24" font-size="8">8 governed feedback, not same-request execution</text>
+</svg></div>
+<div class="cards">
+<div class="card"><h3 style="color:#22d3ee">Synchronous action path</h3><ul><li>1. Principal request enters with delegated authority.</li><li>2. Scope resolver binds it to Agent DID and Citta genesis.</li><li>3. Dharma authorizes before execution.</li><li>4–5. Saṅkalpa proposes; gateway enforces; Prakṛti executes.</li></ul></div>
+<div class="card"><h3 style="color:#a78bfa">Evidence path</h3><ul><li>6. Runtime outcome returns to intrinsic evaluation.</li><li>7. Reward and complete (s,g,c,a,r,z) experience append to Citta.</li><li>Denied requests create decision evidence but no action claim.</li><li>Merkle identity binds conduct to the same deployed Jīva.</li></ul></div>
+<div class="card"><h3 style="color:#fbbf24">Feedback path</h3><ul><li>Karma aggregates identity-bound history and outcomes.</li><li>Karmādhyakṣa audits and attributes harm.</li><li>Policy and learning feedback affect later transitions.</li><li>Ātman remains capability without identity or runtime governance.</li></ul></div>
+</div>
+<p class="footer">JivaHarness · Derived strictly from Figure 2 and Sections 5.1–5.4 · Data-flow view</p>
+</div></body></html>
