@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
 from .audit import AuditLog
+from .demo import SCENARIOS
 from .examples import place_order, quote_price
 from .loop import AgentLoop, Finish, ScriptedPolicy, ToolCall
 from .principles import Ahimsa, PrincipleHook
@@ -103,39 +105,93 @@ def loop_demo(state_dir: Path) -> dict[str, object]:
     }
 
 
+NO_KEY = "Set ANTHROPIC_API_KEY_JIVA (or ANTHROPIC_API_KEY)."
+
+
+def _claude_policy(args: argparse.Namespace):
+    """ClaudePolicy plus the SDK's error base class, or (None, None) after printing why not."""
+    try:
+        import anthropic
+    except ImportError:
+        print("--policy claude needs the Anthropic SDK: pip install -e '.[claude]'", file=sys.stderr)
+        return None, None
+    if not args.verbose:  # the SDK and its HTTP client can log every request at DEBUG
+        for name in ("anthropic", "httpx", "httpx2", "httpcore"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+    from .claude_policy import ClaudePolicy
+    from .demo import SYSTEM
+
+    return ClaudePolicy(model=args.model, system=SYSTEM, effort=args.effort), anthropic.AnthropicError
+
+
+def _api_failure(exc: Exception, api_error: type | None) -> bool:
+    # the SDK raises TypeError, not an API error, when it finds no credentials at all
+    no_credentials = isinstance(exc, TypeError) and "authentication" in str(exc)
+    return api_error is not None and (isinstance(exc, api_error) or no_credentials)
+
+
 def live_demo(args: argparse.Namespace) -> int:
-    from .demo import SYSTEM, render, run_demo, scripted_policy, summarize
+    from .demo import SCENARIOS, render, run_demo, scripted_policy, summarize
 
+    if args.list_scenarios:
+        for name, scenario in SCENARIOS.items():
+            approve = f" [approves {', '.join(sorted(scenario.approve))}]" if scenario.approve else ""
+            print(f"{name}{approve}\n  goal:   {scenario.goal}\n  expect: {scenario.expect}")
+        return 0
+    if args.goal and args.policy == "scripted":
+        print("--goal needs --policy claude: the scripted policy only knows the ready-made scenarios.", file=sys.stderr)
+        return 2
+    scenario = SCENARIOS[args.scenario]
+    goal = args.goal or scenario.goal
+    approved = frozenset(args.approve) | (frozenset() if args.goal else scenario.approve)
+    api_error = None
     if args.policy == "claude":
-        try:
-            import anthropic
-        except ImportError:
-            print("live-demo --policy claude needs the Anthropic SDK: pip install -e '.[claude]'", file=sys.stderr)
+        policy, api_error = _claude_policy(args)
+        if policy is None:
             return 2
-        from .claude_policy import ClaudePolicy
-
-        policy = ClaudePolicy(model=args.model, system=SYSTEM, effort=args.effort)
         header = f"Jiva harness live demo: policy=claude model={args.model}"
     else:
-        policy = scripted_policy()
+        policy = scripted_policy(args.scenario)
         header = "Jiva harness live demo: policy=scripted (no model; replays fixed proposals)"
-    approved = frozenset(args.approve)
+    header += f"\nScenario: {'custom goal' if args.goal else args.scenario}"
     header += f"\nPrincipal approvals: {', '.join(sorted(approved)) or 'none'}"
     try:
-        result, harness, audit = run_demo(args.state_dir, policy, approved)
+        result, harness, audit = run_demo(args.state_dir, policy, approved, goal=goal)
     except Exception as exc:
-        # the SDK raises TypeError, not an API error, when it finds no credentials at all
-        no_credentials = isinstance(exc, TypeError) and "authentication" in str(exc)
-        if args.policy == "claude" and (isinstance(exc, anthropic.AnthropicError) or no_credentials):
-            print(f"Claude API call failed: {exc}\nSet ANTHROPIC_API_KEY_JIVA (or ANTHROPIC_API_KEY), or run with --policy scripted "
-                  "to see the same scenario without a model.", file=sys.stderr)
+        if _api_failure(exc, api_error):
+            print(f"Claude API call failed: {exc}\n{NO_KEY} Or use --policy scripted to run without a model.",
+                  file=sys.stderr)
             return 2
         raise
-    summary = summarize(result, harness, audit, args.state_dir)
+    summary = summarize(result, harness, audit, args.state_dir, goal)
     if args.policy == "claude":
         summary["model_usage"] = policy.usage()
     print(json.dumps(summary, indent=2, sort_keys=True) if args.json else render(summary, header))
     return 0
+
+
+def chat_command(args: argparse.Namespace) -> int:
+    from .demo import build_loop, chat
+
+    policy, api_error = _claude_policy(args)
+    if policy is None:
+        return 2
+    loop, harness, audit = build_loop(args.state_dir, policy)
+    print(f"Jiva harness chat: model={args.model}, agent {harness.citta.did}\nLedger: {args.state_dir}/")
+    try:
+        chat(loop, harness, audit, args.state_dir)
+    except Exception as exc:
+        if _api_failure(exc, api_error):
+            print(f"Claude API call failed: {exc}\n{NO_KEY}", file=sys.stderr)
+            return 2
+        raise
+    return 0
+
+
+def _add_model_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--model", default="claude-opus-5")
+    parser.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max"), default="medium")
+    parser.add_argument("--verbose", action="store_true", help="keep the Anthropic SDK's debug logging")
 
 
 def main() -> None:
@@ -148,12 +204,18 @@ def main() -> None:
     live_parser = subparsers.add_parser(
         "live-demo", help="a model pursues a goal while the harness allows, blocks and denies its actions")
     live_parser.add_argument("--policy", choices=("claude", "scripted"), default="claude")
-    live_parser.add_argument("--model", default="claude-opus-5")
-    live_parser.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max"), default="medium")
+    _add_model_args(live_parser)
+    live_parser.add_argument("--scenario", default="procurement", choices=sorted(SCENARIOS),
+                             help="a ready-made goal; --list-scenarios shows what each tests")
+    live_parser.add_argument("--goal", help="your own goal for the agent (needs --policy claude)")
+    live_parser.add_argument("--list-scenarios", action="store_true")
     live_parser.add_argument("--approve", action="append", default=[], metavar="TOOL",
                              help="principal approval for an irreversible tool, e.g. --approve place_order")
     live_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-live-demo"))
     live_parser.add_argument("--json", action="store_true", help="print the structured summary instead")
+    chat_parser = subparsers.add_parser("chat", help="type goals one after another; the harness judges each action")
+    _add_model_args(chat_parser)
+    chat_parser.add_argument("--state-dir", type=Path, default=Path(".jiva-chat"))
     args = parser.parse_args()
 
     if args.command == "demo":
@@ -164,6 +226,8 @@ def main() -> None:
         print(json.dumps(loop_demo(args.state_dir), indent=2, sort_keys=True))
     elif args.command == "live-demo":
         sys.exit(live_demo(args))
+    elif args.command == "chat":
+        sys.exit(chat_command(args))
 
 
 if __name__ == "__main__":

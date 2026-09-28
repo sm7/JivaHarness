@@ -4,3 +4,4 @@ __pycache__/
 .demo-state/
 .jiva-state/
 .jiva-live-demo/
+.jiva-chat/

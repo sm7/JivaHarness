@@ -4,8 +4,10 @@ import subprocess
 import sys
 from types import SimpleNamespace as NS
 
+import pytest
+
 from jiva_harness.claude_policy import ClaudePolicy
-from jiva_harness.demo import run_demo, summarize
+from jiva_harness.demo import SCENARIOS, build_loop, chat, run_demo, scripted_policy, summarize
 from jiva_harness.loop import Finish
 
 
@@ -148,3 +150,84 @@ def test_api_key_prefers_jiva_variable(monkeypatch):
     assert api_key_from_env() == "general"
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     assert api_key_from_env() is None
+
+
+EXPECTED = {
+    "procurement": ["executed", "denied", "blocked", "denied"],
+    "harmful": ["blocked"],
+    "unknown-tool": ["denied", "denied"],
+    "approved-purchase": ["executed", "executed"],
+    "over-budget": ["executed", "denied"],
+}
+
+
+@pytest.mark.parametrize("name", sorted(SCENARIOS))
+def test_each_scenario_gets_the_verdicts_it_describes(tmp_path, name):
+    scenario = SCENARIOS[name]
+    result, harness, audit = run_demo(tmp_path, scripted_policy(name), scenario.approve, goal=scenario.goal)
+
+    assert [t.outcome for t in result.turns] == EXPECTED[name]
+    assert harness.citta.verify() and audit.verify()
+
+
+def test_custom_goal_reaches_claude_and_the_ledger(tmp_path):
+    client = FakeClient([reply(NS(type="text", text="ok"), stop_reason="end_turn")])
+
+    result, harness, audit = run_demo(tmp_path, ClaudePolicy(client=client), goal="find me a chair")
+
+    assert client.requests[0]["messages"][0] == {"role": "user", "content": "find me a chair"}
+    assert audit.entries()[0]["data"]["goal"] == "find me a chair"
+    assert summarize(result, harness, audit, tmp_path, "find me a chair")["goal"] == "find me a chair"
+
+
+def test_chat_runs_goals_with_approvals_on_one_ledger(tmp_path):
+    client = FakeClient([
+        reply(tool_use("a", "place_order", item="laptop", amount=900)),
+        reply(NS(type="text", text="blocked"), stop_reason="end_turn"),
+        reply(tool_use("b", "place_order", item="laptop", amount=900)),
+        reply(NS(type="text", text="ordered"), stop_reason="end_turn"),
+    ])
+    loop, harness, audit = build_loop(tmp_path, ClaudePolicy(client=client))
+    lines = iter(["buy a laptop", "/approve place_order", "buy a laptop", "/bogus", "/quit"])
+    out: list[str] = []
+
+    chat(loop, harness, audit, tmp_path, read=lambda _: next(lines), write=out.append)
+
+    text = "\n".join(out)
+    assert "BLOCKED  by principle hook" in text and "ALLOWED  ->" in text
+    assert "unknown command /bogus" in text
+    assert [r.experience.action["name"] for r in harness.citta.records] == ["refused", "purchase"]
+    assert audit.verify() and [e["event"] for e in audit.entries()].count("run_started") == 2
+
+
+def test_chat_ends_on_eof(tmp_path):
+    loop, harness, audit = build_loop(tmp_path, ClaudePolicy(client=FakeClient([])))
+
+    def eof(_):
+        raise EOFError
+
+    chat(loop, harness, audit, tmp_path, read=eof, write=lambda _: None)
+    assert audit.entries() == []
+
+
+def test_cli_rejects_custom_goal_without_a_model(tmp_path):
+    completed = subprocess.run(
+        [sys.executable, "-m", "jiva_harness.cli", "live-demo", "--policy", "scripted", "--goal", "x",
+         "--state-dir", str(tmp_path)],
+        capture_output=True, text=True,
+    )
+    assert completed.returncode == 2 and "--goal needs --policy claude" in completed.stderr
+
+
+def test_sdk_debug_logging_is_quiet_unless_verbose(monkeypatch):
+    import argparse
+    import logging
+
+    from jiva_harness.cli import _claude_policy
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY_JIVA", "k")
+    logging.getLogger("anthropic").setLevel(logging.DEBUG)
+    _claude_policy(argparse.Namespace(model="m", effort="low", verbose=True))
+    assert logging.getLogger("anthropic").level == logging.DEBUG
+    _claude_policy(argparse.Namespace(model="m", effort="low", verbose=False))
+    assert logging.getLogger("anthropic").level == logging.WARNING

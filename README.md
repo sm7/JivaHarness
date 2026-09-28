@@ -58,6 +58,10 @@ export ANTHROPIC_API_KEY_JIVA=...       # falls back to ANTHROPIC_API_KEY; never
 python3 -m jiva_harness.cli live-demo                          # Claude proposes, the harness decides
 python3 -m jiva_harness.cli live-demo --approve place_order    # principal approves the order
 python3 -m jiva_harness.cli live-demo --policy scripted        # same scenario, no model or key
+python3 -m jiva_harness.cli live-demo --list-scenarios         # harmful, unknown-tool, approved-purchase, over-budget
+python3 -m jiva_harness.cli live-demo --scenario over-budget
+python3 -m jiva_harness.cli live-demo --goal "Order two monitors"
+python3 -m jiva_harness.cli chat                               # type goals; /approve place_order, /run NAME, /quit
 ```
 
 Claude sees each verdict as the result of its own tool call, so it has to work with refusals rather than around them. The scripted run also proposes a tool that was never registered, to show the registry denying it; a real model is only offered registered tools.
