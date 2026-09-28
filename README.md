@@ -34,7 +34,11 @@ python3 -m jiva_harness.cli demo --state-dir .demo-state
 python3 -m jiva_harness.cli loop-demo --state-dir .demo-state
 ```
 
+![pytest run](docs/screenshots/tests.png)
+
 The demo performs one scoped procurement action, issues an ephemeral/non-transferable/identity-scoped OBO credential anchored to Citta, evaluates the action with the paper's tripartite reward shape, appends the experience to Citta, and verifies its Merkle proof.
+
+![demo output](docs/screenshots/demo.png)
 
 ## Agent loop
 
@@ -46,7 +50,21 @@ The demo performs one scoped procurement action, issues an ephemeral/non-transfe
 4. **Execution** (Prakṛti): the tool handler runs; exceptions become observations.
 5. **Critic and Citta**: Karmaphaladātā scores the action and Citta appends the paper tuple.
 
+![loop-demo output](docs/screenshots/loop-demo.png)
+
+Step 1 executes, step 2 is blocked by `Ahimsa` because `place_order` has an external effect and was not approved, and step 3 is denied because `delete_records` is not a registered tool.
+
 Every step is written to `audit.jsonl` (`audit.py`), an append-only hash-chained log. Refused actions (blocked, denied, halted) are also Citta leaves: the plaintext says only that a refusal happened, and the tool, args and reason sit in an envelope produced by a `Sealer` (`sealing.py`). Citta hashes the envelope, so swapping `PlaintextSealer` for an encrypting one keeps Merkle proofs verifiable without the key. The audit log still holds proposal args in plaintext. The model sits behind the `Policy` protocol in `loop.py`; `ScriptedPolicy` is a deterministic stand-in, and no LLM provider is connected yet.
+
+## Data-flow diagram
+
+`docs/data-flow-architecture.html` renders the runtime data flow across the planes:
+
+![Runtime data-flow diagram](docs/screenshots/data-flow-architecture.png)
+
+## Screenshots
+
+The images in `docs/screenshots/` are captured from real runs by `docs/screenshots/capture.py` (needs `pip install playwright`; set `CHROMIUM_PATH` to use a system Chromium).
 
 ## Scope of implementation
 
