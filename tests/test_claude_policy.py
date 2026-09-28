@@ -135,3 +135,16 @@ def test_cli_live_demo_scripted(tmp_path):
     summary = json.loads(completed.stdout)
     assert [t["outcome"] for t in summary["turns"]] == ["executed", "denied", "blocked", "denied"]
     assert summary["citta"]["verified"] and summary["audit"]["verified"] and summary["audit"]["tamper_detected"]
+
+
+def test_api_key_prefers_jiva_variable(monkeypatch):
+    from jiva_harness.claude_policy import api_key_from_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "general")
+    monkeypatch.setenv("ANTHROPIC_API_KEY_JIVA", "jiva")
+    assert api_key_from_env() == "jiva"
+    assert ClaudePolicy(fallbacks=False).client.api_key == "jiva"
+    monkeypatch.delenv("ANTHROPIC_API_KEY_JIVA")
+    assert api_key_from_env() == "general"
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    assert api_key_from_env() is None

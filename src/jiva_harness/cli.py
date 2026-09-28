@@ -127,7 +127,7 @@ def live_demo(args: argparse.Namespace) -> int:
         # the SDK raises TypeError, not an API error, when it finds no credentials at all
         no_credentials = isinstance(exc, TypeError) and "authentication" in str(exc)
         if args.policy == "claude" and (isinstance(exc, anthropic.AnthropicError) or no_credentials):
-            print(f"Claude API call failed: {exc}\nSet ANTHROPIC_API_KEY, or run with --policy scripted "
+            print(f"Claude API call failed: {exc}\nSet ANTHROPIC_API_KEY_JIVA (or ANTHROPIC_API_KEY), or run with --policy scripted "
                   "to see the same scenario without a model.", file=sys.stderr)
             return 2
         raise

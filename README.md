@@ -54,7 +54,7 @@ Every step is written to `audit.jsonl` (`audit.py`), an append-only hash-chained
 
 ```bash
 python3 -m pip install -e '.[claude]'
-export ANTHROPIC_API_KEY=...            # never commit this
+export ANTHROPIC_API_KEY_JIVA=...       # falls back to ANTHROPIC_API_KEY; never commit this
 python3 -m jiva_harness.cli live-demo                          # Claude proposes, the harness decides
 python3 -m jiva_harness.cli live-demo --approve place_order    # principal approves the order
 python3 -m jiva_harness.cli live-demo --policy scripted        # same scenario, no model or key

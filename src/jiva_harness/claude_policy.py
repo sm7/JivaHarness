@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from .loop import Finish, Proposal, ToolCall, Turn
 
 DEFAULT_MODEL = "claude-opus-5"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+API_KEY_ENV = ("ANTHROPIC_API_KEY_JIVA", "ANTHROPIC_API_KEY")  # first one set wins
+
+
+def api_key_from_env() -> str | None:
+    return next((os.environ[name] for name in API_KEY_ENV if os.environ.get(name)), None)
 
 
 def _api_tool(spec: dict[str, Any]) -> dict[str, Any]:
@@ -41,7 +47,9 @@ class ClaudePolicy:
         if client is None:
             import anthropic  # optional dependency: pip install 'jiva-harness[claude]'
 
-            client = anthropic.Anthropic()
+            key = api_key_from_env()
+            # with no key set, the SDK resolves other credentials (auth token, ant profile) itself
+            client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
         self.client, self.model, self.system = client, model, system
         self.effort, self.max_tokens, self.fallbacks = effort, max_tokens, fallbacks
         self.messages: list[dict[str, Any]] = []
