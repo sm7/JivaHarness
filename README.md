@@ -46,7 +46,21 @@ The demo performs one scoped procurement action, issues an ephemeral/non-transfe
 4. **Execution** (Prakṛti): the tool handler runs; exceptions become observations.
 5. **Critic and Citta**: Karmaphaladātā scores the action and Citta appends the paper tuple.
 
-Every step is written to `audit.jsonl` (`audit.py`), an append-only hash-chained log. Refused actions (blocked, denied, halted) are also Citta leaves: the plaintext says only that a refusal happened, and the tool, args and reason sit in an envelope produced by a `Sealer` (`sealing.py`). Citta hashes the envelope, so swapping `PlaintextSealer` for an encrypting one keeps Merkle proofs verifiable without the key. The audit log still holds proposal args in plaintext. The model sits behind the `Policy` protocol in `loop.py`; `ScriptedPolicy` is a deterministic stand-in, and no LLM provider is connected yet.
+Every step is written to `audit.jsonl` (`audit.py`), an append-only hash-chained log. Refused actions (blocked, denied, halted) are also Citta leaves: the plaintext says only that a refusal happened, and the tool, args and reason sit in an envelope produced by a `Sealer` (`sealing.py`). Citta hashes the envelope, so swapping `PlaintextSealer` for an encrypting one keeps Merkle proofs verifiable without the key. The audit log still holds proposal args in plaintext. The model sits behind the `Policy` protocol in `loop.py`; `ScriptedPolicy` is a deterministic stand-in and `ClaudePolicy` (`claude_policy.py`) connects Claude through Anthropic tool use.
+
+## Live demo
+
+`live-demo` gives a model a procurement goal ("quote a laptop, save a draft PO, place the order") and prints what the harness did with each proposed action: the quote runs, the draft PO is denied by the permission gate (capability not in scope), and the order is blocked by Ahimsa (external effect without principal approval). It then verifies the Citta Merkle proofs and the audit hash chain, and shows that editing one audit entry breaks the chain.
+
+```bash
+python3 -m pip install -e '.[claude]'
+export ANTHROPIC_API_KEY=...            # never commit this
+python3 -m jiva_harness.cli live-demo                          # Claude proposes, the harness decides
+python3 -m jiva_harness.cli live-demo --approve place_order    # principal approves the order
+python3 -m jiva_harness.cli live-demo --policy scripted        # same scenario, no model or key
+```
+
+Claude sees each verdict as the result of its own tool call, so it has to work with refusals rather than around them. The scripted run also proposes a tool that was never registered, to show the registry denying it; a real model is only offered registered tools.
 
 ## Scope of implementation
 
@@ -54,7 +68,7 @@ This is a working **reference harness**, not a claim that the paper's full enter
 
 Current approximations are kept visible:
 
-- The base LLM provider is represented by a deterministic policy boundary, not a connected model.
+- The base LLM provider sits behind the `Policy` boundary: `ClaudePolicy` for a real model, `ScriptedPolicy` for deterministic tests.
 - `activation_trace` is a deterministic digest, not hidden model activations.
 - Karmaphaladātā is an approximate critic; the paper itself says deployment cannot be omniscient.
 - No online model fine-tuning is claimed. The losses for policy head/backbone are documented, but this harness does not pretend to optimize unavailable model parameters.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
 from .runtime import DeploymentSpec, PrincipalRequest, ScopeResolver, VerifiableCredential
@@ -19,11 +19,12 @@ class Tool:
     description: str
     handler: Callable[[dict[str, Any]], dict[str, Any]]
     risk: RiskClass = "read"
+    input_schema: dict[str, Any] = field(default_factory=lambda: {"type": "object", "properties": {}})
 
     def spec(self) -> dict[str, Any]:
         return {
             "name": self.name, "capability": self.capability,
-            "description": self.description, "risk": self.risk,
+            "description": self.description, "risk": self.risk, "input_schema": self.input_schema,
         }
 
 
