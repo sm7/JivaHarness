@@ -1,6 +1,6 @@
 # JivaHarness
 
-A governance-first executable reference model of the architecture proposed in **“An Advaita Vedanta Approach to Agentic AI Identity and Governance.”**
+A governance-first executable reference model of the architecture proposed in **“An Advaita Vedanta Approach to Agentic AI Identity and Governance.”- Hari Hayagreevan, Jordan McAfoose & Kush R. Varshney**
 
 This repository does not reinterpret the paper as a generic agent framework. Its source of truth is:
 
