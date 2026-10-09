@@ -10,6 +10,7 @@ from typing import Any, Callable
 from .audit import AuditLog
 from .citta import CittaLedger
 from .examples import place_order, quote_price, save_draft_po
+from .importance import ImportanceGate
 from .loop import AgentLoop, Finish, LoopResult, Policy, Proposal, ScriptedPolicy, ToolCall
 from .principles import ActionContext, Ahimsa, PrincipleHook
 from .runtime import DeploymentSpec, JivaHarness
@@ -129,7 +130,8 @@ def build_loop(
     for tool in TOOLS:
         registry.register(tool)
     audit = AuditLog(state_dir / "audit.jsonl")
-    loop = AgentLoop(harness, registry, PrincipleHook([Ahimsa(ask=ask)]), audit, policy, max_steps=max_steps)
+    loop = AgentLoop(harness, registry, PrincipleHook([Ahimsa(ask=ask)]), audit, policy, max_steps=max_steps,
+                     importance=ImportanceGate())
     return loop, harness, audit
 
 
@@ -182,6 +184,7 @@ def ledger_status(harness: JivaHarness, audit: AuditLog, state_dir: Path) -> dic
         "citta": {
             "records": len(records),
             "refusals": sum(1 for r in records if r.experience.action.get("name") == "refused"),
+            "rollups": sum(1 for r in records if r.experience.action.get("name") == "rollup"),
             "verified": harness.citta.verify() and all(harness.citta.prove(r.index).verify() for r in records),
             "root": harness.citta.root,
         },
@@ -218,7 +221,8 @@ def render(summary: dict[str, Any], header: str, show_goal: bool = True) -> str:
         f"Answer ({summary['stop_reason']}): {summary['answer']}",
         "",
         f"Agent DID:  {summary['agent_did']}",
-        f"Citta:      {citta['records']} records ({citta['refusals']} refusals, sealed), "
+        f"Citta:      {citta['records']} records ({citta['refusals']} refusals, sealed; "
+        f"{citta['rollups']} rollups of routine actions), "
         f"Merkle proofs verify: {yes[citta['verified']]}",
         f"Audit log:  {audit['entries']} hash-chained entries, chain verifies: {yes[audit['verified']]}, "
         f"one-field edit detected: {yes[audit['tamper_detected']]}",

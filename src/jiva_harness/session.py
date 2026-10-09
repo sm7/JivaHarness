@@ -137,7 +137,7 @@ class Session:
             status = ledger_status(self.harness, self.audit, self.state_dir)
             citta, audit = status["citta"], status["audit"]
             self.write(f"  identity   {status['agent_did']}\n"
-                       f"  citta      {citta['records']} records ({citta['refusals']} refusals), "
+                       f"  citta      {citta['records']} records ({citta['refusals']} refusals, {citta['rollups']} rollups), "
                        f"Merkle proofs verify: {citta['verified']}, root {citta['root'][:16]}...\n"
                        f"  audit log  {audit['entries']} entries, hash chain verifies: {audit['verified']}, "
                        f"one-field edit detected: {'n/a (empty log)' if audit['tamper_detected'] is None else audit['tamper_detected']}")

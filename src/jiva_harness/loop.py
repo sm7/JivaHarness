@@ -7,6 +7,7 @@ from typing import Any, Callable, Literal, Protocol
 
 from .audit import AuditLog
 from .citta import Experience
+from .importance import ImportanceGate
 from .principles import ActionContext, PrincipleHook
 from .runtime import JivaHarness, PrincipalRequest
 from .sealing import PlaintextSealer, Sealer
@@ -68,16 +69,22 @@ class AgentLoop:
 
     Refused actions (blocked, denied, halted) are Citta conduct too. Their tool, args and reason go
     through `sealer`, so they can be encrypted later without changing the ledger.
+
+    With an `importance` gate, routine executed actions are kept out of Citta (they stay in the audit
+    log), and each run that skipped any ends with one rollup leaf committing to that audit span.
     """
 
     def __init__(
         self, harness: JivaHarness, registry: ToolRegistry, hook: PrincipleHook,
         audit: AuditLog, policy: Policy, max_steps: int = 8, sealer: Sealer | None = None,
+        importance: ImportanceGate | None = None,
     ):
         self.harness, self.registry, self.hook = harness, registry, hook
         self.audit, self.policy, self.max_steps = audit, policy, max_steps
         self.sealer: Sealer = sealer or PlaintextSealer()
+        self.importance = importance
         self._halt: tuple[str, str] | None = None
+        self._skipped: list[dict[str, Any]] = []  # audit entries of this run's actions kept out of Citta
         # Observers for interactive front ends: called before a proposal is gated and after its verdict.
         self.on_proposal: Callable[[int, ToolCall], None] | None = None
         self.on_turn: Callable[[Turn], None] | None = None
@@ -95,11 +102,13 @@ class AgentLoop:
                           approved_irreversible=sorted(approved_irreversible))
         turns: list[Turn] = []
         self._halt = None
+        self._skipped = []
         for step in range(1, self.max_steps + 1):
             proposal = self.policy.propose(goal, turns, self.registry.specs())
             if self._halt:  # a halt raised while the model was thinking beats its proposal
-                return self._stop_halted(step, turns)
+                return self._stop_halted(step, turns, principal, channel, goal)
             if isinstance(proposal, Finish):
+                self._roll_up(principal, channel, goal)
                 self.audit.record("run_finished", did, step=step, answer=proposal.answer,
                                   citta_root=self.harness.citta.root)
                 return LoopResult(proposal.answer, "finished", turns)
@@ -111,15 +120,34 @@ class AgentLoop:
             if self.on_turn:
                 self.on_turn(turn)
             if self._halt:
-                return self._stop_halted(step, turns)
+                return self._stop_halted(step, turns, principal, channel, goal)
+        self._roll_up(principal, channel, goal)
         self.audit.record("run_stopped", did, reason="max_steps", citta_root=self.harness.citta.root)
         return LoopResult(None, "max_steps", turns)
 
-    def _stop_halted(self, step: int, turns: list[Turn]) -> LoopResult:
+    def _stop_halted(self, step: int, turns: list[Turn], principal: str, channel: str, goal: str) -> LoopResult:
+        self._roll_up(principal, channel, goal)
         raised_by, reason = self._halt or ("", "")
         self.audit.record("algedonic_halt", self.harness.citta.did, step=step, raised_by=raised_by,
                           reason=reason, citta_root=self.harness.citta.root)
         return LoopResult(None, "halted", turns)
+
+    def _roll_up(self, principal: str, channel: str, goal: str) -> None:
+        """One Citta leaf committing to the audit span of this run's skipped actions, so none goes unanchored."""
+        if not self._skipped:
+            return
+        first, last = self._skipped[0], self._skipped[-1]
+        state = {"principal": principal, "channel": channel}
+        constraints = self._constraints()
+        action = {"name": "rollup", "skipped": len(self._skipped), "audit_from_seq": first["seq"],
+                  "audit_to_seq": last["seq"], "audit_to_hash": last["hash"]}
+        reward = {"evaluated": False, "reason": "rollup of actions below the importance threshold"}
+        trace = {"digest": _digest({"state": state, "goal": goal, "constraints": constraints, "action": action})}
+        record = self.harness.citta.append(Experience(state, goal, constraints, action, reward, trace))
+        self.audit.record("citta_rollup", self.harness.citta.did, skipped=len(self._skipped),
+                          audit_from_seq=first["seq"], audit_to_seq=last["seq"],
+                          citta_index=record.index, citta_leaf=record.leaf_hash)
+        self._skipped = []
 
     def _constraints(self) -> dict[str, Any]:
         spec = self.harness.spec
@@ -201,8 +229,16 @@ class AgentLoop:
         state = {"partial_observation": call.args, "principal": principal, "channel": channel, "step": step}
         trace = {"digest": _digest({"state": state, "goal": goal, "constraints": constraints, "action": action})}
         request = PrincipalRequest(principal, channel, goal, call.args, tool.capability)
-        reward = harness.karmaphaladata.evaluate(harness.spec, request, action, trace)
-        record = harness.citta.append(Experience(state, goal, constraints, action, reward.to_dict(), trace))
+        reward = harness.karmaphaladata.evaluate(harness.spec, request, action, trace).to_dict()
+        decision = self.importance.decide(tool, step, reward) if self.importance else None
+        if decision is not None and not decision.keep:
+            entry = self.audit.record("tool_executed", did, step=step, tool=tool.name, observation=observation,
+                                      reward=reward, citta_skipped=True, importance_score=decision.score,
+                                      importance_reason=decision.reason)
+            self._skipped.append(entry)
+            return Turn(step, call, "executed", observation)
+        record = harness.citta.append(Experience(state, goal, constraints, action, reward, trace))
+        importance = {"importance_score": decision.score, "importance_reason": decision.reason} if decision else {}
         self.audit.record("tool_executed", did, step=step, tool=tool.name, observation=observation,
-                          reward=reward.to_dict(), citta_index=record.index, citta_leaf=record.leaf_hash)
+                          reward=reward, citta_index=record.index, citta_leaf=record.leaf_hash, **importance)
         return Turn(step, call, "executed", observation)
