@@ -59,7 +59,11 @@ class CittaLedger:
     def __init__(self, path: Path, genesis_hash: str, records: list[CittaRecord] | None = None):
         self.path = path
         self.genesis_hash = genesis_hash
-        self.records = records or []
+        self.records: list[CittaRecord] = []
+        # Merkle levels, leaves first. Appends touch one node per level, so root and proofs are O(log n).
+        self._levels: list[list[str]] = [[genesis_hash]]
+        for record in records or []:
+            self._add_record(record)
 
     @classmethod
     def create(cls, path: str | Path, brahmacarya_buffer: list[dict[str, Any]]) -> "CittaLedger":
@@ -91,16 +95,26 @@ class CittaLedger:
 
     @property
     def root(self) -> str:
-        return self._root([self.genesis_hash] + [record.leaf_hash for record in self.records])
+        return self._levels[-1][0]
 
-    @staticmethod
-    def _root(leaves: list[str]) -> str:
-        level = list(leaves)
-        while len(level) > 1:
-            if len(level) % 2:
-                level.append(level[-1])
-            level = [_pair(level[i], level[i + 1]) for i in range(0, len(level), 2)]
-        return level[0]
+    def _add_record(self, record: CittaRecord) -> None:
+        """Add a leaf and recompute only its path to the root. An odd level pairs its last node with itself."""
+        self.records.append(record)
+        self._levels[0].append(record.leaf_hash)
+        level = 0
+        while len(self._levels[level]) > 1:
+            nodes = self._levels[level]
+            parent = (len(nodes) - 1) // 2
+            left = nodes[2 * parent]
+            right = nodes[2 * parent + 1] if 2 * parent + 1 < len(nodes) else left
+            if level + 1 == len(self._levels):
+                self._levels.append([])
+            above = self._levels[level + 1]
+            if parent < len(above):
+                above[parent] = _pair(left, right)
+            else:
+                above.append(_pair(left, right))
+            level += 1
 
     def append(self, experience: Experience) -> CittaRecord:
         # The paper's Lt = H(st, gt, ct, at, rt, zt), represented canonically by fields.
@@ -110,7 +124,7 @@ class CittaLedger:
                 "type": "experience", "index": record.index,
                 "leaf_hash": record.leaf_hash, "experience": experience.to_dict(),
             }, sort_keys=True) + "\n")
-        self.records.append(record)
+        self._add_record(record)
         return record
 
     def verify(self) -> bool:
@@ -129,17 +143,13 @@ class CittaLedger:
         )
 
     def prove(self, record_index: int) -> MerkleProof:
-        leaves = [self.genesis_hash] + [record.leaf_hash for record in self.records]
-        if not 0 <= record_index < len(leaves):
+        if not 0 <= record_index < len(self._levels[0]):
             raise IndexError(record_index)
         index = record_index
-        level = leaves
         siblings: list[tuple[str, str]] = []
-        while len(level) > 1:
-            if len(level) % 2:
-                level = level + [level[-1]]
+        for nodes in self._levels[:-1]:
             sibling_index = index - 1 if index % 2 else index + 1
-            siblings.append(("left" if index % 2 else "right", level[sibling_index]))
+            sibling = nodes[sibling_index] if sibling_index < len(nodes) else nodes[index]
+            siblings.append(("left" if index % 2 else "right", sibling))
             index //= 2
-            level = [_pair(level[i], level[i + 1]) for i in range(0, len(level), 2)]
-        return MerkleProof(leaves[record_index], record_index, tuple(siblings), level[0])
+        return MerkleProof(self._levels[0][record_index], record_index, tuple(siblings), self.root)
