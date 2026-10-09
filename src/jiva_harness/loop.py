@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from .audit import AuditLog
 from .citta import Experience
@@ -78,6 +78,9 @@ class AgentLoop:
         self.audit, self.policy, self.max_steps = audit, policy, max_steps
         self.sealer: Sealer = sealer or PlaintextSealer()
         self._halt: tuple[str, str] | None = None
+        # Observers for interactive front ends: called before a proposal is gated and after its verdict.
+        self.on_proposal: Callable[[int, ToolCall], None] | None = None
+        self.on_turn: Callable[[Turn], None] | None = None
 
     def halt(self, raised_by: str, reason: str) -> None:
         """Algedonic loop: any principal or subsystem may stop the run; checked around every step."""
@@ -101,8 +104,12 @@ class AgentLoop:
                                   citta_root=self.harness.citta.root)
                 return LoopResult(proposal.answer, "finished", turns)
             self.audit.record("proposal", did, step=step, tool=proposal.tool, args=proposal.args)
+            if self.on_proposal:
+                self.on_proposal(step, proposal)
             turn = self._step(step, proposal, principal, channel, goal, approved_irreversible)
             turns.append(turn)
+            if self.on_turn:
+                self.on_turn(turn)
             if self._halt:
                 return self._stop_halted(step, turns)
         self.audit.record("run_stopped", did, reason="max_steps", citta_root=self.harness.citta.root)
