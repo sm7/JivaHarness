@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
+from .guardian import GuardianUnavailable, HarmDetector
 from .tools import CONSEQUENTIAL, Tool
 
 
@@ -53,6 +54,31 @@ class Ahimsa:
         if self.ask is not None and self.ask(ctx):
             return Verdict(self.name, True, f"{ctx.tool.risk} action approved by principal when proposed")
         return Verdict(self.name, False, f"'{ctx.tool.name}' is {ctx.tool.risk} and was not approved by the principal")
+
+
+class HarmCheck:
+    """Non-harm judged by a harm detector (Granite Guardian) on the proposed call, before it runs.
+
+    It can only block, never approve: Ahimsa's rule that consequential tools need the principal still
+    holds. If the detector gives no verdict, consequential tools fail closed and read or reversible
+    tools fail open, with the reason recorded either way.
+    """
+
+    name = "harm_check"
+
+    def __init__(self, detector: HarmDetector):
+        self.detector = detector
+
+    def check(self, ctx: ActionContext) -> Verdict:
+        try:
+            assessment = self.detector.assess(ctx.goal, ctx.tool.name, ctx.args)
+        except GuardianUnavailable as exc:
+            if ctx.tool.risk in CONSEQUENTIAL:
+                return Verdict(self.name, False, f"harm detector unavailable, {ctx.tool.risk} action refused: {exc}")
+            return Verdict(self.name, True, f"harm detector unavailable, {ctx.tool.risk} action allowed: {exc}")
+        if assessment.harmful:
+            return Verdict(self.name, False, f"{assessment.model} judged the call harmful")
+        return Verdict(self.name, True, f"{assessment.model} judged the call not harmful")
 
 
 class PrincipleHook:

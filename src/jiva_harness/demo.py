@@ -10,9 +10,11 @@ from typing import Any, Callable
 from .audit import AuditLog
 from .citta import CittaLedger
 from .examples import place_order, quote_price, save_draft_po
+from .guardian import HarmDetector
+from .importance import ImportanceGate
 from .loop import AgentLoop, Finish, LoopResult, Policy, Proposal, ScriptedPolicy, ToolCall
-from .principles import ActionContext, Ahimsa, PrincipleHook
-from .runtime import DeploymentSpec, JivaHarness
+from .principles import ActionContext, Ahimsa, HarmCheck, Principle, PrincipleHook
+from .runtime import DeploymentSpec, JivaHarness, Karmaphaladata
 from .tools import ToolRegistry
 
 GOAL = (
@@ -114,29 +116,34 @@ TOOLS = (quote_price, save_draft_po, place_order)
 
 def build_loop(
     state_dir: Path, policy: Policy, max_steps: int = 8, resume: bool = False,
-    ask: Callable[[ActionContext], bool] | None = None,
+    ask: Callable[[ActionContext], bool] | None = None, guardian: HarmDetector | None = None,
 ) -> tuple[AgentLoop, JivaHarness, AuditLog]:
     """Deploy the procurement Jiva in state_dir: a fresh ledger, or with resume=True the one already there.
 
-    `ask` lets Ahimsa put an irreversible action to the principal when it is proposed.
+    `ask` lets Ahimsa put an irreversible action to the principal when it is proposed. `guardian` adds a
+    harm detector before each call (HarmCheck) and after it (the critic's harm term).
     """
     state_dir.mkdir(parents=True, exist_ok=True)
     if not resume:
         for name in ("citta.jsonl", "audit.jsonl"):
             (state_dir / name).unlink(missing_ok=True)
     harness = JivaHarness(SPEC, CittaLedger.open(state_dir / "citta.jsonl", BRAHMACARYA))
+    harness.karmaphaladata = Karmaphaladata(guardian)
+    principles: list[Principle] = ([HarmCheck(guardian)] if guardian else []) + [Ahimsa(ask=ask)]
     registry = ToolRegistry(harness.scope_resolver)
     for tool in TOOLS:
         registry.register(tool)
     audit = AuditLog(state_dir / "audit.jsonl")
-    loop = AgentLoop(harness, registry, PrincipleHook([Ahimsa(ask=ask)]), audit, policy, max_steps=max_steps)
+    loop = AgentLoop(harness, registry, PrincipleHook(principles), audit, policy, max_steps=max_steps,
+                     importance=ImportanceGate())
     return loop, harness, audit
 
 
 def run_demo(
     state_dir: Path, policy: Policy, approved: frozenset[str] = frozenset(), max_steps: int = 8, goal: str = GOAL,
+    guardian: HarmDetector | None = None,
 ) -> tuple[LoopResult, JivaHarness, AuditLog]:
-    loop, harness, audit = build_loop(state_dir, policy, max_steps)
+    loop, harness, audit = build_loop(state_dir, policy, max_steps, guardian=guardian)
     result = loop.run(principal=PRINCIPAL, channel=CHANNEL, goal=goal, approved_irreversible=approved)
     return result, harness, audit
 
@@ -182,6 +189,7 @@ def ledger_status(harness: JivaHarness, audit: AuditLog, state_dir: Path) -> dic
         "citta": {
             "records": len(records),
             "refusals": sum(1 for r in records if r.experience.action.get("name") == "refused"),
+            "rollups": sum(1 for r in records if r.experience.action.get("name") == "rollup"),
             "verified": harness.citta.verify() and all(harness.citta.prove(r.index).verify() for r in records),
             "root": harness.citta.root,
         },
@@ -218,7 +226,8 @@ def render(summary: dict[str, Any], header: str, show_goal: bool = True) -> str:
         f"Answer ({summary['stop_reason']}): {summary['answer']}",
         "",
         f"Agent DID:  {summary['agent_did']}",
-        f"Citta:      {citta['records']} records ({citta['refusals']} refusals, sealed), "
+        f"Citta:      {citta['records']} records ({citta['refusals']} refusals, sealed; "
+        f"{citta['rollups']} rollups of routine actions), "
         f"Merkle proofs verify: {yes[citta['verified']]}",
         f"Audit log:  {audit['entries']} hash-chained entries, chain verifies: {yes[audit['verified']]}, "
         f"one-field edit detected: {yes[audit['tamper_detected']]}",

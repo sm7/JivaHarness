@@ -156,8 +156,9 @@ def live_demo(args: argparse.Namespace) -> int:
         header = "Jiva harness live demo: policy=scripted (no model; replays fixed proposals)"
     header += f"\nScenario: {'custom goal' if args.goal else args.scenario}"
     header += f"\nPrincipal approvals: {', '.join(sorted(approved)) or 'none'}"
+    header += f"\nHarm detector: {args.guardian or 'off'}"
     try:
-        result, harness, audit = run_demo(args.state_dir, policy, approved, goal=goal)
+        result, harness, audit = run_demo(args.state_dir, policy, approved, goal=goal, guardian=_guardian(args))
     except Exception as exc:
         if _api_failure(exc, api_error):
             print(f"Claude API call failed: {exc}\n{NO_KEY} Or use --policy scripted to run without a model.",
@@ -181,7 +182,7 @@ def session_command(args: argparse.Namespace) -> int:
     def recoverable(exc: Exception) -> str | None:
         return f"Claude API call failed: {exc}\n  {NO_KEY}" if _api_failure(exc, api_error) else None
 
-    Session(policy, args.state_dir, recoverable=recoverable).repl()
+    Session(policy, args.state_dir, recoverable=recoverable, guardian=_guardian(args)).repl()
     return 0
 
 
@@ -191,11 +192,28 @@ def _add_model_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--verbose", action="store_true", help="keep the Anthropic SDK's debug logging")
 
 
+def _add_guardian_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--guardian", metavar="URL",
+                        help="judge every action with Granite Guardian at this OpenAI-compatible endpoint, "
+                             "e.g. http://127.0.0.1:8080/v1 (llama-server)")
+    parser.add_argument("--guardian-model", default=None,
+                        help="model name the endpoint expects (default: ibm-granite/granite-guardian-4.1-8b)")
+
+
+def _guardian(args: argparse.Namespace):
+    if not args.guardian:
+        return None
+    from .guardian import DEFAULT_MODEL, GraniteGuardian
+
+    return GraniteGuardian(args.guardian, model=args.guardian_model or DEFAULT_MODEL)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Jiva governance harness. With no command, starts an interactive session: you give the "
                     "agent tasks, and every action it proposes is judged by the harness as it happens.")
     _add_model_args(parser)
+    _add_guardian_args(parser)
     parser.add_argument("--state-dir", type=Path, default=Path(".jiva"),
                         help="where the agent's identity ledger and audit log live (kept between sessions)")
     subparsers = parser.add_subparsers(dest="command")
@@ -207,6 +225,7 @@ def main() -> None:
         "live-demo", help="a model pursues a goal while the harness allows, blocks and denies its actions")
     live_parser.add_argument("--policy", choices=("claude", "scripted"), default="claude")
     _add_model_args(live_parser)
+    _add_guardian_args(live_parser)
     live_parser.add_argument("--scenario", default="procurement", choices=sorted(SCENARIOS),
                              help="a ready-made goal; --list-scenarios shows what each tests")
     live_parser.add_argument("--goal", help="your own goal for the agent (needs --policy claude)")

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .citta import CittaLedger, Experience
+from .guardian import GuardianUnavailable, HarmDetector
 
 
 @dataclass(frozen=True)
@@ -49,10 +50,13 @@ class Reward:
     sattva_divergence: float
     sankalpa_shakti: float = 0.5
     sattva_weight: float = 0.25
+    harm: float | None = None  # 1.0 harmful, 0.0 not, None when no detector gave a verdict
+    harm_weight: float = 1.0
 
     @property
     def total(self) -> float:
-        return self.task + self.sankalpa_shakti * self.sreya - self.sattva_weight * self.sattva_divergence
+        return (self.task + self.sankalpa_shakti * self.sreya - self.sattva_weight * self.sattva_divergence
+                - self.harm_weight * (self.harm or 0.0))
 
     def to_dict(self) -> dict[str, float]:
         return {**asdict(self), "total": self.total}
@@ -152,15 +156,30 @@ class Sankalpa:
 
 
 class Karmaphaladata:
-    """Practical approximate intrinsic critic with the paper's tripartite reward."""
+    """Practical approximate intrinsic critic with the paper's tripartite reward.
+
+    With a harm `detector`, an executed action and its observation are also judged for harm, which
+    adds a fourth, penalty-only term. Without one, the reward is the original three terms.
+    """
+
+    def __init__(self, detector: HarmDetector | None = None):
+        self.detector = detector
 
     def evaluate(
-        self, spec: DeploymentSpec, request: PrincipalRequest, action: dict[str, Any], activation_trace: dict[str, Any]
+        self, spec: DeploymentSpec, request: PrincipalRequest, action: dict[str, Any], activation_trace: dict[str, Any],
+        observation: dict[str, Any] | None = None,
     ) -> Reward:
         task = 1.0 if action["name"] == request.requested_capability else 0.0
         sreya = 1.0 if all(spec.universal_obligations) and spec.purpose in action["content"] else 0.5
         sattva_divergence = abs(1.0 - spec.guna["sattva"])
-        return Reward(task=task, sreya=sreya, sattva_divergence=sattva_divergence)
+        harm = None
+        if self.detector is not None and "tool" in action:
+            try:
+                harmful = self.detector.assess(request.goal, action["tool"], action.get("args", {}), observation).harmful
+                harm = 1.0 if harmful else 0.0
+            except GuardianUnavailable:
+                harm = None
+        return Reward(task=task, sreya=sreya, sattva_divergence=sattva_divergence, harm=harm)
 
 
 class JivaHarness:

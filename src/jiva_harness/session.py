@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .demo import SCENARIOS, TOOLS, build_loop, decided_by, ledger_status
+from .guardian import HarmDetector
 from .loop import ToolCall, Turn
 from .principles import ActionContext
 
@@ -34,12 +35,13 @@ class Session:
     def __init__(
         self, policy: Any, state_dir: Path, read: Callable[[str], str] = input,
         write: Callable[[str], None] = print, recoverable: Callable[[Exception], str | None] = lambda exc: None,
-        max_steps: int = 8,
+        max_steps: int = 8, guardian: HarmDetector | None = None,
     ):
         self.policy, self.state_dir, self.read, self.write = policy, state_dir, read, write
         self.recoverable = recoverable
         self.always: set[str] = set()
-        self.loop, self.harness, self.audit = build_loop(state_dir, policy, max_steps, resume=True, ask=self._ask)
+        self.loop, self.harness, self.audit = build_loop(state_dir, policy, max_steps, resume=True, ask=self._ask,
+                                                          guardian=guardian)
         self.loop.on_proposal, self.loop.on_turn = self._show_proposal, self._show_turn
 
     # -- harness callbacks -------------------------------------------------------------------------
@@ -137,7 +139,7 @@ class Session:
             status = ledger_status(self.harness, self.audit, self.state_dir)
             citta, audit = status["citta"], status["audit"]
             self.write(f"  identity   {status['agent_did']}\n"
-                       f"  citta      {citta['records']} records ({citta['refusals']} refusals), "
+                       f"  citta      {citta['records']} records ({citta['refusals']} refusals, {citta['rollups']} rollups), "
                        f"Merkle proofs verify: {citta['verified']}, root {citta['root'][:16]}...\n"
                        f"  audit log  {audit['entries']} entries, hash chain verifies: {audit['verified']}, "
                        f"one-field edit detected: {'n/a (empty log)' if audit['tamper_detected'] is None else audit['tamper_detected']}")
