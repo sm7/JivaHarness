@@ -229,7 +229,7 @@ class AgentLoop:
         state = {"partial_observation": call.args, "principal": principal, "channel": channel, "step": step}
         trace = {"digest": _digest({"state": state, "goal": goal, "constraints": constraints, "action": action})}
         request = PrincipalRequest(principal, channel, goal, call.args, tool.capability)
-        reward = harness.karmaphaladata.evaluate(harness.spec, request, action, trace).to_dict()
+        reward = harness.karmaphaladata.evaluate(harness.spec, request, action, trace, observation).to_dict()
         decision = self.importance.decide(tool, step, reward) if self.importance else None
         if decision is not None and not decision.keep:
             entry = self.audit.record("tool_executed", did, step=step, tool=tool.name, observation=observation,

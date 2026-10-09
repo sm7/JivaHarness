@@ -44,9 +44,21 @@ The demo performs one scoped procurement action, issues an ephemeral/non-transfe
 2. **Principle hook** (`principles.py`, sādhāraṇa-dharma): every principle is evaluated and recorded; any failure blocks. Each tool declares a risk class (`read`, `reversible_write`, `irreversible`, `external_effect`). Example: `Ahimsa` blocks the last two unless the human principal approved that tool for the run (approval never comes from model-authored args). A principle can also return `halt=True`, and `AgentLoop.halt()` can be called from outside: this is the algedonic loop, which stops the whole run and is audited.
 3. **Permission gate** (`ToolRegistry.gate`, viśeṣa-dharma): the scope resolver issues a fresh ephemeral, non-transferable credential for this one call, or denies it.
 4. **Execution** (Prakṛti): the tool handler runs; exceptions become observations.
-5. **Critic and Citta**: Karmaphaladātā scores the action and Citta appends the paper tuple.
+5. **Critic and Citta**: Karmaphaladātā scores the action, and the importance gate (`importance.py`) decides whether it becomes a Citta leaf.
 
 Every step is written to `audit.jsonl` (`audit.py`), an append-only hash-chained log. Refused actions (blocked, denied, halted) are also Citta leaves: the plaintext says only that a refusal happened, and the tool, args and reason sit in an envelope produced by a `Sealer` (`sealing.py`). Citta hashes the envelope, so swapping `PlaintextSealer` for an encrypting one keeps Merkle proofs verifiable without the key. The audit log still holds proposal args in plaintext. The model sits behind the `Policy` protocol in `loop.py`; `ScriptedPolicy` is a deterministic stand-in and `ClaudePolicy` (`claude_policy.py`) connects Claude through Anthropic tool use.
+
+**Importance gate.** So the ledger doesn't grow with every routine step, `ImportanceGate` keeps only actions that matter: anything that isn't a read, anything a harm detector flagged, and anything with a low reward. Refusals bypass it and are always recorded. Routine reads stay in the audit log only, and each run that skipped some ends with one rollup leaf that commits to their audit span (first and last `seq`, last hash). An optional `ImportanceModel` (a cheap decision model, Jev-style or a local classifier) can keep more, never fewer; it sees only plaintext metadata, never args. Citta's Merkle tree is maintained incrementally, so appends, roots and proofs are O(log n).
+
+**Harm detector.** With `--guardian URL`, IBM's Granite Guardian judges every proposed call before it runs (`HarmCheck` in `principles.py`, which can block but never approve) and every executed call with its result after (a penalty-only `harm` term in the critic's reward). If Guardian gives no verdict, consequential tools are refused and reads are allowed, with the reason recorded. It runs locally behind any OpenAI-compatible endpoint (`guardian.py`); on a Mac, with llama.cpp:
+
+```bash
+brew install llama.cpp
+llama-server -hf ibm-granite/granite-guardian-4.1-8b-GGUF:Q4_K_M --port 8080
+python3 -m jiva_harness.cli live-demo --policy scripted --guardian http://127.0.0.1:8080/v1
+```
+
+The first `llama-server` run downloads about 5 GB of weights from Hugging Face. Tests never need the model: they use `FakeHarmDetector`.
 
 ## Live demo
 

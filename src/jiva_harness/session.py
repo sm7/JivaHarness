@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .demo import SCENARIOS, TOOLS, build_loop, decided_by, ledger_status
+from .guardian import HarmDetector
 from .loop import ToolCall, Turn
 from .principles import ActionContext
 
@@ -34,12 +35,13 @@ class Session:
     def __init__(
         self, policy: Any, state_dir: Path, read: Callable[[str], str] = input,
         write: Callable[[str], None] = print, recoverable: Callable[[Exception], str | None] = lambda exc: None,
-        max_steps: int = 8,
+        max_steps: int = 8, guardian: HarmDetector | None = None,
     ):
         self.policy, self.state_dir, self.read, self.write = policy, state_dir, read, write
         self.recoverable = recoverable
         self.always: set[str] = set()
-        self.loop, self.harness, self.audit = build_loop(state_dir, policy, max_steps, resume=True, ask=self._ask)
+        self.loop, self.harness, self.audit = build_loop(state_dir, policy, max_steps, resume=True, ask=self._ask,
+                                                          guardian=guardian)
         self.loop.on_proposal, self.loop.on_turn = self._show_proposal, self._show_turn
 
     # -- harness callbacks -------------------------------------------------------------------------
